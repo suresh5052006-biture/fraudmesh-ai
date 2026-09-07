@@ -64,7 +64,7 @@ def generate_customers(count: int = 5000) -> List[Dict[str, Any]]:
     return customers
 
 
-def generate_accounts(count: int = 5000, customers: List[Dict]) -> List[Dict[str, Any]]:
+def generate_accounts(count: int, customers: List[Dict]) -> List[Dict[str, Any]]:
     """Generate synthetic account data"""
     account_types = ["checking", "savings", "business", "prepaid"]
     statuses = ["active", "active", "active", "active", "suspended", "closed"]
@@ -140,7 +140,7 @@ def generate_ip_addresses(count: int = 1000) -> List[Dict[str, Any]]:
     return ip_addresses
 
 
-def generate_payment_instruments(count: int = 2000, customers: List[Dict]) -> List[Dict[str, Any]]:
+def generate_payment_instruments(count: int, customers: List[Dict]) -> List[Dict[str, Any]]:
     """Generate synthetic payment instrument data"""
     instrument_types = ["card", "bank_account", "upi", "wallet"]
     networks = ["Visa", "Mastercard", "RuPay", "None", "None", "None"]
@@ -169,6 +169,13 @@ def generate_payment_instruments(count: int = 2000, customers: List[Dict]) -> Li
     return payment_instruments
 
 
+def safe_sample(lst: List[Any], k: int) -> List[Any]:
+    """Safely sample k items from list, capping at list length"""
+    if not lst:
+        return []
+    return random.sample(lst, min(k, len(lst)))
+
+
 def create_fraud_rings(
     merchants: List[Dict],
     customers: List[Dict],
@@ -190,10 +197,15 @@ def create_fraud_rings(
 
     # Fraud Ring 1: Quick Cashout Ring
     # High-value transactions from new accounts using same device
-    ring1_accounts = random.sample(accounts, 50)
+    ring1_accounts = safe_sample(accounts, 50)
     ring1_device = random.choice(devices)
     ring1_ip = random.choice(ip_addresses)
-    ring1_merchants = random.sample([m for m in merchants if m["risk_level"] == "high"], 3)
+    high_risk_merchants = [m for m in merchants if m["risk_level"] == "high"]
+    if not high_risk_merchants:
+        high_risk_merchants = [m for m in merchants if m["risk_level"] in ["high", "medium"]]
+    if not high_risk_merchants:
+        high_risk_merchants = merchants
+    ring1_merchants = safe_sample(high_risk_merchants, 3)
 
     fraud_rings.append({
         "ring_id": "FR001",
@@ -209,9 +221,10 @@ def create_fraud_rings(
 
     # Fraud Ring 2: Distributed Testing Ring
     # Small test transactions across many accounts and devices
-    ring2_accounts = random.sample([a for a in accounts if a["status"] == "active"], 100)
-    ring2_devices = random.sample(devices, 20)
-    ring2_ips = random.sample(ip_addresses, 10)
+    active_accounts = [a for a in accounts if a["status"] == "active"]
+    ring2_accounts = safe_sample(active_accounts if active_accounts else accounts, 100)
+    ring2_devices = safe_sample(devices, 20)
+    ring2_ips = safe_sample(ip_addresses, 10)
 
     fraud_rings.append({
         "ring_id": "FR002",
@@ -227,13 +240,13 @@ def create_fraud_rings(
 
     # Fraud Ring 3: Account Takeover Pattern
     # Multiple accounts showing sudden device/IP changes
-    ring3_accounts = random.sample(accounts, 30)
+    ring3_accounts = safe_sample(accounts, 30)
     ring3_new_devices = [d for d in devices if d["is_rooted"] or d["is_emulator"]][:5]
     if not ring3_new_devices:
-        ring3_new_devices = random.sample(devices, 5)
+        ring3_new_devices = safe_sample(devices, 5)
     ring3_vpn_ips = [ip for ip in ip_addresses if ip["is_vpn"]][:3]
     if not ring3_vpn_ips:
-        ring3_vpn_ips = random.sample(ip_addresses, 3)
+        ring3_vpn_ips = safe_sample(ip_addresses, 3)
 
     fraud_rings.append({
         "ring_id": "FR003",
@@ -249,24 +262,34 @@ def create_fraud_rings(
 
     # Fraud Ring 4: Collusive Merchant Ring
     # Multiple merchants and accounts coordinating on transactions
-    ring4_merchants = random.sample([m for m in merchants if m["category"] in ["E-commerce", "Marketplace"]], 5)
+    target_merchants = [m for m in merchants if m["category"] in ["E-commerce", "Marketplace"]]
+    if not target_merchants:
+        target_merchants = merchants
+    ring4_merchants = safe_sample(target_merchants, 5)
     ring4_accounts = []
     for merchant in ring4_merchants:
         for _ in range(10):
             cust = random.choice(customers)
             if cust["customer_id"] in accounts_by_customer:
                 ring4_accounts.extend(accounts_by_customer[cust["customer_id"]][:1])
-    ring4_accounts = list(dict.fromkeys(ring4_accounts))[:30]
+    seen_accs = set()
+    unique_ring4_accounts = []
+    for acc in ring4_accounts:
+        if acc["account_id"] not in seen_accs:
+            seen_accs.add(acc["account_id"])
+            unique_ring4_accounts.append(acc)
+    ring4_accounts = unique_ring4_accounts[:30]
+
     ring4_ips = [ip for ip in ip_addresses if ip["is_datacenter"]][:5]
     if not ring4_ips:
-        ring4_ips = random.sample(ip_addresses, 5)
+        ring4_ips = safe_sample(ip_addresses, 5)
 
     fraud_rings.append({
         "ring_id": "FR004",
         "name": "Collusive Merchant Ring",
         "description": "Multiple merchants coordinating with accounts using data center IPs",
         "accounts": [a["account_id"] for a in ring4_accounts],
-        "devices": random.sample(devices, 10),
+        "devices": [d["device_id"] for d in safe_sample(devices, 10)],
         "ip_addresses": [ip["ip_address"] for ip in ring4_ips],
         "merchants": [m["merchant_id"] for m in ring4_merchants],
         "pattern": "merchant_account_collusion",
@@ -275,18 +298,22 @@ def create_fraud_rings(
 
     # Fraud Ring 5: International Money Laundering Ring
     # Large transactions with high-risk country IPs
-    ring5_accounts = random.sample(accounts, 40)
+    ring5_accounts = safe_sample(accounts, 40)
     ring5_high_risk_ips = [ip for ip in ip_addresses
                            if ip["risk_score"] > 70 or ip["is_proxy"]][:5]
-    ring5_merchants = random.sample(
-        [m for m in merchants if m["category"] in ["Travel", "Finance"]], 4)
+    if not ring5_high_risk_ips:
+        ring5_high_risk_ips = safe_sample(ip_addresses, 5)
+    travel_finance_merchants = [m for m in merchants if m["category"] in ["Travel", "Finance"]]
+    if not travel_finance_merchants:
+        travel_finance_merchants = merchants
+    ring5_merchants = safe_sample(travel_finance_merchants, 4)
 
     fraud_rings.append({
         "ring_id": "FR005",
         "name": "International Laundering Ring",
         "description": "Large transactions using high-risk proxy IPs and international flows",
         "accounts": [a["account_id"] for a in ring5_accounts],
-        "devices": random.sample(devices, 8),
+        "devices": [d["device_id"] for d in safe_sample(devices, 8)],
         "ip_addresses": [ip["ip_address"] for ip in ring5_high_risk_ips],
         "merchants": [m["merchant_id"] for m in ring5_merchants],
         "pattern": "international_money_laundering",
@@ -377,15 +404,11 @@ def generate_transactions(
             amount = round(random.expovariate(0.1), 2)
             timestamp = generate_timestamp(90)
 
-        status_options = ["completed", "completed", "completed", "completed",
-                         "pending", "failed", "declined", "declined"]
-
         # Fraudulent transactions more likely to be declined
         if is_fraudulent:
-            status_options = ["declined", "declined", "declined", "completed", "failed"]
-
-        status = random.choices(status_options, weights=[50, 25, 15, 8, 2] if is_fraudulent
-                               else [50, 25, 15, 8, 2])[0]
+            status = random.choices(["declined", "completed", "failed"], weights=[70, 20, 10])[0]
+        else:
+            status = random.choices(["completed", "pending", "failed", "declined"], weights=[85, 5, 5, 5])[0]
 
         transactions.append({
             "transaction_id": f"TXN{i:06d}",

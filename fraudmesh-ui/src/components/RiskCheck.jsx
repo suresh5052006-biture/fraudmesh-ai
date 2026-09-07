@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Loader2, AlertTriangle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Search, Loader2, AlertTriangle, ShieldCheck, Sparkles, Bot, Lock } from 'lucide-react';
 import apiService from '../services/api';
+import RiskRadarGauge from './RiskRadarGauge';
+import soundService from '../services/audio';
 
 const RiskCheck = () => {
   const [formData, setFormData] = useState({
@@ -10,6 +12,7 @@ const RiskCheck = () => {
     device_id: 'DEV0001',
     payment_instrument_id: 'PI0001',
     customer_id: 'CUS00001',
+    ip_address: '192.168.4.12'
   });
 
   const [result, setResult] = useState(null);
@@ -20,16 +23,22 @@ const RiskCheck = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'amount' ? parseFloat(value) : value
+      [name]: name === 'amount' ? parseFloat(value) || 0 : value
     }));
   };
 
   const handleCheck = async () => {
     try {
+      soundService.playScan();
       setLoading(true);
       setError(null);
       const data = await apiService.checkRisk(formData);
       setResult(data);
+
+      if (data.recommended_action === 'BLOCK') soundService.playAlert();
+      else if (data.recommended_action === 'STEP_UP') soundService.playStepUp();
+      else soundService.playApproved();
+
     } catch (err) {
       setError(err.message);
     } finally {
@@ -37,84 +46,80 @@ const RiskCheck = () => {
     }
   };
 
-  const getRiskColor = (score) => {
-    if (score >= 80) return 'text-red-400';
-    if (score >= 60) return 'text-orange-400';
-    if (score >= 40) return 'text-yellow-400';
-    return 'text-green-400';
-  };
-
   return (
-    <div className="p-8 bg-primary min-h-screen">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-2">
-          <Search className="w-8 h-8" />
-          Live Risk Check
+    <div className="p-6 lg:p-8 bg-slate-950 min-h-screen text-slate-100 font-sans space-y-6">
+      <div className="mb-4">
+        <h1 className="text-3xl font-extrabold text-white mb-1 flex items-center gap-2">
+          <Search className="w-7 h-7 text-indigo-400" />
+          Real-Time Risk Engine & Radar
         </h1>
-        <p className="text-slate-400">Check fraud risk for any transaction</p>
+        <p className="text-sm text-slate-400">Evaluate transactions against 9 explainable signals and network intelligence</p>
       </div>
 
-      <div className="max-w-2xl">
-        <div className="bg-secondary rounded-lg p-6 border border-slate-700 mb-6">
-          <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Input Form */}
+        <div className="bg-slate-900 rounded-xl p-6 border border-slate-800 shadow-xl space-y-4">
+          <h2 className="text-lg font-bold text-white mb-2">Transaction Parameters</h2>
+
+          <div className="space-y-3 text-xs">
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Merchant ID</label>
+              <label className="block font-mono text-slate-400 mb-1">Merchant ID</label>
               <input
                 type="text"
                 name="merchant_id"
                 value={formData.merchant_id}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Amount ($)</label>
+              <label className="block font-mono text-slate-400 mb-1">Amount ($ USD)</label>
               <input
                 type="number"
                 name="amount"
                 value={formData.amount}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Account ID</label>
+              <label className="block font-mono text-slate-400 mb-1">Account ID</label>
               <input
                 type="text"
                 name="account_id"
                 value={formData.account_id}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Device ID</label>
+              <label className="block font-mono text-slate-400 mb-1">Device ID Fingerprint</label>
               <input
                 type="text"
                 name="device_id"
                 value={formData.device_id}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Payment Instrument</label>
+              <label className="block font-mono text-slate-400 mb-1">Payment Instrument Hash</label>
               <input
                 type="text"
                 name="payment_instrument_id"
                 value={formData.payment_instrument_id}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">Customer ID</label>
+              <label className="block font-mono text-slate-400 mb-1">IP Address</label>
               <input
                 type="text"
-                name="customer_id"
-                value={formData.customer_id}
+                name="ip_address"
+                value={formData.ip_address}
                 onChange={handleChange}
-                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded text-white placeholder-slate-500 focus:outline-none focus:border-accent"
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-lg text-white font-mono focus:outline-none focus:border-indigo-500"
               />
             </div>
           </div>
@@ -122,117 +127,47 @@ const RiskCheck = () => {
           <button
             onClick={handleCheck}
             disabled={loading}
-            className="w-full mt-6 px-4 py-3 bg-accent hover:bg-red-600 disabled:bg-slate-700 text-white rounded-lg transition font-medium flex items-center justify-center gap-2"
+            className="w-full mt-4 px-4 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl font-bold transition shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 text-sm"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-            Check Transaction
+            Evaluate 9-Signal Risk
           </button>
         </div>
 
-        {error && (
-          <div className="p-4 bg-red-500/10 border border-red-500 rounded-lg text-red-200 mb-6">
-            Error: {error}
+        {/* Right 2 Cols: Radar & Decision Spectrum */}
+        <div className="lg:col-span-2 space-y-6">
+          {error && (
+            <div className="p-4 bg-red-500/10 border border-red-500 rounded-xl text-red-200 text-sm">
+              Error evaluating transaction: {error}
+            </div>
+          )}
+
+          <RiskRadarGauge
+            riskScore={result ? result.risk_score : 72}
+            signals={result ? result.signals : [
+              { signal_type: 'device_reuse', score_contribution: 35 },
+              { signal_type: 'merchant_hopping', score_contribution: 25 },
+              { signal_type: 'velocity_spike', score_contribution: 20 },
+            ]}
+          />
+
+          {/* Privacy Shield Inspector Card */}
+          <div className="p-6 bg-slate-900 border border-slate-800 rounded-xl shadow-xl space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-white text-sm flex items-center gap-2">
+                <Lock className="w-4 h-4 text-emerald-400" />
+                Zero-Knowledge Privacy Shield Verification
+              </h3>
+              <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-mono">
+                100% Zero PII Shared
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300">
+              When screening against network signals, FraudMesh AI matches salted cryptographic hashes of hardware signatures and velocity buckets. No card numbers, customer names, or emails ever leave your local database server.
+            </p>
           </div>
-        )}
-
-        {result && (
-          <div className="bg-secondary rounded-lg p-6 border border-slate-700">
-            <h2 className="text-xl font-bold text-white mb-6">Risk Assessment Result</h2>
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div className="bg-slate-800 rounded p-4">
-                <p className="text-slate-400 text-sm mb-2">Risk Score</p>
-                <p className={`text-3xl font-bold ${getRiskColor(result.risk_score)}`}>
-                  {result.risk_score}/100
-                </p>
-              </div>
-              <div className="bg-slate-800 rounded p-4">
-                <p className="text-slate-400 text-sm mb-2">Risk Level</p>
-                <p className="text-2xl font-bold text-white">{result.risk_level}</p>
-              </div>
-            </div>
-
-            {/* Risk Spectrum & Decision Bar */}
-            <div className="bg-slate-800 rounded p-5 mb-6 border border-slate-700">
-              <div className="flex justify-between items-center mb-2">
-                <p className="text-slate-300 font-semibold text-sm">Decision Spectrum</p>
-                <span className="text-xs font-mono px-2 py-1 bg-slate-900 text-accent rounded font-bold">
-                  Verdict: {result.recommended_action}
-                </span>
-              </div>
-
-              {/* Progress Bar Container */}
-              <div className="relative my-6">
-                <div className="h-4 w-full rounded-full flex overflow-hidden border border-slate-900 bg-slate-900">
-                  <div className="w-[50%] bg-emerald-500 flex items-center justify-center text-[10px] font-bold text-slate-950">
-                    ALLOW (&lt;50)
-                  </div>
-                  <div className="w-[20%] bg-yellow-500 flex items-center justify-center text-[10px] font-bold text-slate-950">
-                    STEP_UP (50-69)
-                  </div>
-                  <div className="w-[15%] bg-orange-500 flex items-center justify-center text-[10px] font-bold text-slate-950">
-                    REVIEW (70-84)
-                  </div>
-                  <div className="w-[15%] bg-red-600 flex items-center justify-center text-[10px] font-bold text-white">
-                    BLOCK (85+)
-                  </div>
-                </div>
-
-                {/* Score Marker Pin */}
-                <div
-                  className="absolute -top-3 transform -translate-x-1/2 flex flex-col items-center transition-all duration-500"
-                  style={{ left: `${Math.min(Math.max(result.risk_score, 0), 100)}%` }}
-                >
-                  <div className="bg-white text-slate-950 text-xs font-extrabold px-2 py-0.5 rounded shadow-lg border border-slate-300 font-mono">
-                    {result.risk_score}
-                  </div>
-                  <div className="w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[6px] border-t-white"></div>
-                </div>
-              </div>
-
-              {/* Threshold Ticks */}
-              <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                <span>0</span>
-                <span>50</span>
-                <span>70</span>
-                <span>85</span>
-                <span>100</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-800 rounded p-4 mb-6 flex justify-between items-center">
-              <div>
-                <p className="text-slate-400 text-sm">Recommended Action</p>
-                <p className="text-xl font-bold text-accent">{result.recommended_action}</p>
-              </div>
-              <div className="text-right">
-                <span className="text-xs text-slate-400 font-mono">
-                  {result.recommended_action === 'ALLOW' && '✅ Direct Gateway Approval'}
-                  {result.recommended_action === 'STEP_UP' && '🔐 Require 3DS / OTP Challenge'}
-                  {result.recommended_action === 'REVIEW' && '🔍 Route to Manual Risk Analyst'}
-                  {result.recommended_action === 'BLOCK' && '🚫 Auto-Decline Transaction'}
-                </span>
-              </div>
-            </div>
-
-            {result.signals && result.signals.length > 0 && (
-              <div>
-                <h3 className="text-lg font-bold text-white mb-3">Detected Signals</h3>
-                <div className="space-y-2">
-                  {result.signals.map((signal, idx) => (
-                    <div key={idx} className="bg-slate-800 rounded p-3 flex justify-between items-start">
-                      <div>
-                        <p className="text-slate-300 font-medium">{signal.signal_type}</p>
-                        <p className="text-slate-500 text-sm">{signal.description}</p>
-                      </div>
-                      <span className="text-yellow-400 font-bold">+{signal.score_contribution.toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

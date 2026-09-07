@@ -1,0 +1,108 @@
+{
+  "scenario": "Signal Exchange Between Merchants",
+  "steps": {
+    "1_discover": {
+      "merchant": "MER0005",
+      "fraud_transactions_found": 11
+    },
+    "2_publish": {
+      "signals_created": [
+        {
+          "signal_id": "FS-001",
+          "pattern_type": "DEVICE_FRAUD",
+          "severity": "CRITICAL",
+          "confidence": 0.93
+        },
+        {
+          "signal_id": "FS-002",
+          "pattern_type": "IP_REPUTATION",
+          "severity": "LOW",
+          "confidence": 0.85
+        }
+      ]
+    },
+    "3_receive": {
+      "merchant": "MER0010",
+      "signals_available": 2
+    },
+    "4_match": {
+      "transaction_id": "TXN000026",
+      "match_result": {
+        "has_match": true,
+        "recommended_action": "STEP_UP",
+        "matches": [
+          {
+            "signal_id": "FS-001",
+            "pattern_type": "DEVICE_FRAUD",
+            "match_score": 59.3,
+            "matched_criteria": [
+              "device_reuse",
+              "multi_account_activity"
+            ],
+            "severity": "CRITICAL",
+            "confidence": 0.93
+          }
+        ]
+      }
+    }
+  },
+  "signal_database": [
+    {
+      "signal_id": "FS-001",
+      "pattern_type": "DEVICE_FRAUD",
+      "signals": [
+        "device_reuse",
+        "multi_account_activity",
+        "high_velocity"
+      ],
+      "severity": "CRITICAL",
+      "confidence": 0.93,
+      "version": 1,
+      "publisher_id": "MER0005",
+      "published_at": "2026-09-04T15:48:44.696Z",
+      "expires_at": "2026-10-04T15:48:44.697Z",
+      "is_active": true,
+      "match_count": 1,
+      "device_fingerprints": [
+        "DEV0009"
+      ],
+      "ip_patterns": null,
+      "matching_criteria": {
+        "required_signals": [
+          "device_reuse",
+          "multi_account_activity"
+        ],
+        "min_signal_count": 2
+      }
+    },
+    {
+      "signal_id": "FS-002",
+      "pattern_type": "IP_REPUTATION",
+      "signals": [
+        "ip_reputation"
+      ],
+      "severity": "LOW",
+      "confidence": 0.85,
+      "version": 1,
+      "publisher_id": "MER0005",
+      "published_at": "2026-09-04T15:48:44.698Z",
+      "expires_at": "2026-10-04T15:48:44.698Z",
+      "is_active": true,
+      "match_count": 0,
+      "device_fingerprints": null,
+      "ip_patterns": [
+        {
+          "first_octet": 184,
+          "second_octet": 184,
+          "subnet": "184.184.*.*"
+        }
+      ],
+      "matching_criteria": {
+        "required_signals": [
+          "ip_reputation"
+        ],
+        "ip_subnet_pattern": "184.184.*.*"
+      }
+    }
+  ]
+}

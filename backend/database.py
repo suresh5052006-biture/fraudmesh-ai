@@ -38,6 +38,8 @@ def init_db():
     print("Database tables created successfully")
 
 
+from datetime import datetime
+
 def seed_database(dataset_path: str = None):
     """Seed database with synthetic data from seed_data.py output"""
     if dataset_path is None:
@@ -57,16 +59,22 @@ def seed_database(dataset_path: str = None):
         # Seed Merchants
         print("Seeding merchants...")
         for merchant in dataset.get("merchants", []):
+            if "created_at" in merchant and isinstance(merchant["created_at"], str):
+                merchant["created_at"] = datetime.fromisoformat(merchant["created_at"])
             db.add(Merchant(**merchant))
 
         # Seed Customers
         print("Seeding customers...")
         for customer in dataset.get("customers", []):
+            if "created_at" in customer and isinstance(customer["created_at"], str):
+                customer["created_at"] = datetime.fromisoformat(customer["created_at"])
             db.add(Customer(**customer))
 
         # Seed Accounts
         print("Seeding accounts...")
         for account in dataset.get("accounts", []):
+            if "created_at" in account and isinstance(account["created_at"], str):
+                account["created_at"] = datetime.fromisoformat(account["created_at"])
             db.add(Account(**account))
 
         # Seed Devices
@@ -102,6 +110,8 @@ def seed_database(dataset_path: str = None):
         # Seed Transactions
         print("Seeding transactions...")
         for txn in dataset.get("transactions", []):
+            if "timestamp" in txn and isinstance(txn["timestamp"], str):
+                txn["timestamp"] = datetime.fromisoformat(txn["timestamp"])
             db.add(Transaction(**txn))
 
         db.commit()
@@ -113,6 +123,8 @@ def seed_database(dataset_path: str = None):
     except Exception as e:
         db.rollback()
         print(f"Error seeding database: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
 

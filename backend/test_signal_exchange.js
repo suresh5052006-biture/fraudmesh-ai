@@ -281,6 +281,9 @@ console.log(`Total transactions: ${merchantATransactions.length}`);
 const fraudTxnsForA = merchantATransactions.filter(t => t.is_fraudulent);
 console.log(`Fraudulent transactions: ${fraudTxnsForA.length}`);
 
+let riskyIPs = [];
+let sampleFraudTxn = fraudTxnsForA[0] || null;
+
 if (fraudTxnsForA.length > 0) {
   console.log(`\nAnalyzing fraud patterns...`);
 
@@ -316,16 +319,12 @@ if (fraudTxnsForA.length > 0) {
     }
   }
 
-  let riskyIPs = Object.entries(ipFraudMap)
+  riskyIPs = Object.entries(ipFraudMap)
     .filter(([ip, count]) => count >= 2)
     .map(([ip, count]) => ({ ip, fraudCount: count }));
 
   console.log(`  IPs with 2+ fraudulent txns: ${riskyIPs.length}`);
-
-  // Store for later use
-  window_riskyIPs = riskyIPs;
-  window_sampleFraudTxn = sampleFraudTxn;
-  window_merchantATransactions = merchantATransactions;
+}
 
 // STEP 2: FS-001 is created
 console.log("\n" + "-".repeat(80));
@@ -333,7 +332,7 @@ console.log("STEP 2: Merchant A Publishes Privacy-Preserving Signal (FS-001)");
 console.log("-".repeat(80));
 
 // Create a signal for device fraud pattern
-const sampleFraudTxn = fraudTxnsForA[0];
+sampleFraudTxn = fraudTxnsForA[0];
 if (sampleFraudTxn) {
   const signal1 = publishSignal(
     merchantA,
@@ -423,6 +422,7 @@ console.log(`Fraudulent transactions: ${merchantBFraudTxns.length}`);
 
 // Select a suspicious transaction
 let testTransaction = merchantBFraudTxns[0] || merchantBTransactions[0];
+let matchResult = null;
 
 if (testTransaction) {
   console.log(`\n🧪 Testing Transaction:`);
@@ -441,7 +441,7 @@ if (testTransaction) {
 
   // Match against signals
   console.log(`\n🔍 Matching Against Published Signals...`);
-  const matchResult = matchTransaction(testTransaction, relatedTxns);
+  matchResult = matchTransaction(testTransaction, relatedTxns);
 
   console.log(`\n📊 Match Results:`);
   console.log(`  Total Signals Checked: ${matchResult.total_signals_checked}`);

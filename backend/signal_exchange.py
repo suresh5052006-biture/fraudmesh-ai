@@ -38,7 +38,7 @@ class SignalSeverity(str, Enum):
     CRITICAL = "CRITICAL"
 
 
-class FraudSignal(Base):
+class ExchangeFraudSignal(Base):
     """Fraud signal stored in database - privacy-preserving"""
     __tablename__ = "fraud_signals_exchange"
 
@@ -214,7 +214,7 @@ def publish_signal(
     account_behavior: Dict = None,
     transaction_patterns: Dict = None,
     expires_in_days: int = 30
-) -> FraudSignal:
+) -> ExchangeFraudSignal:
     """Publish a new fraud signal (privacy-preserving)"""
 
     signal_id = generate_signal_id()
@@ -223,7 +223,7 @@ def publish_signal(
     # Set expiration
     expires_at = datetime.utcnow() + timedelta(days=expires_in_days)
 
-    signal = FraudSignal(
+    signal = ExchangeFraudSignal(
         signal_id=signal_id,
         pattern_type=pattern_type,
         signals=signals,
@@ -254,13 +254,13 @@ def get_all_signals(
     active_only: bool = True,
     min_severity: str = None,
     limit: int = 100
-) -> List[FraudSignal]:
+) -> List[ExchangeFraudSignal]:
     """Get all published signals"""
-    query = db.query(FraudSignal)
+    query = db.query(ExchangeFraudSignal)
 
     if active_only:
-        query = query.filter(FraudSignal.is_active == True)
-        query = query.filter(FraudSignal.expires_at > datetime.utcnow())
+        query = query.filter(ExchangeFraudSignal.is_active == True)
+        query = query.filter(ExchangeFraudSignal.expires_at > datetime.utcnow())
 
     if min_severity:
         severity_order = {
@@ -271,12 +271,12 @@ def get_all_signals(
         }
         min_level = severity_order.get(min_severity, 1)
         query = query.filter(
-            FraudSignal.severity.in_(
+            ExchangeFraudSignal.severity.in_(
                 [s for s, level in severity_order.items() if level >= min_level]
             )
         )
 
-    return query.order_by(FraudSignal.published_at.desc()).limit(limit).all()
+    return query.order_by(ExchangeFraudSignal.published_at.desc()).limit(limit).all()
 
 
 def match_transaction_against_signals(
@@ -289,9 +289,9 @@ def match_transaction_against_signals(
     """
 
     # Get active signals
-    signals = db.query(FraudSignal).filter(
-        FraudSignal.is_active == True,
-        FraudSignal.expires_at > datetime.utcnow()
+    signals = db.query(ExchangeFraudSignal).filter(
+        ExchangeFraudSignal.is_active == True,
+        ExchangeFraudSignal.expires_at > datetime.utcnow()
     ).all()
 
     if not signals:
@@ -414,7 +414,7 @@ def match_transaction_against_signals(
     }
 
 
-def generate_signals_from_transactions(db: Session, merchant_id: str, limit: int = 100) -> List[FraudSignal]:
+def generate_signals_from_transactions(db: Session, merchant_id: str, limit: int = 100) -> List[ExchangeFraudSignal]:
     """Generate fraud signals from transaction patterns for a merchant"""
 
     # Get recent transactions for this merchant
@@ -524,7 +524,7 @@ def generate_signals_from_transactions(db: Session, merchant_id: str, limit: int
     return published_signals
 
 
-def serialize_signal(signal: FraudSignal) -> Dict[str, Any]:
+def serialize_signal(signal: ExchangeFraudSignal) -> Dict[str, Any]:
     """Serialize a fraud signal for API response"""
     return {
         "signal_id": signal.signal_id,
