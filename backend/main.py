@@ -616,6 +616,85 @@ async def startup_event():
         db.close()
 
 
+# Payment & Balance Endpoints for Online Payment Platform
+
+class BalanceResponse(BaseModel):
+    account_id: str
+    balance: float
+    currency: str = "USD"
+
+class PaymentRequest(BaseModel):
+    account_id: str
+    amount: float
+    payment_method: str = "card"
+    risk_score: int = 0
+    signals: List[Dict[str, Any]] = []
+    transaction_id: Optional[str] = None
+
+class PaymentResponse(BaseModel):
+    status: str
+    message: str
+    transaction_id: str
+    timestamp: str
+    amount: float
+
+class Account(BaseModel):
+    id: str
+    account_id: str
+    balance: float
+    currency: str = "USD"
+
+MOCK_ACCOUNTS = {
+    "ACC00001": {"id": "1", "account_id": "ACC00001", "balance": 12500.00, "currency": "USD"},
+    "ACC00002": {"id": "2", "account_id": "ACC00002", "balance": 8500.00, "currency": "USD"},
+    "ACC00003": {"id": "3", "account_id": "ACC00003", "balance": 20000.00, "currency": "USD"},
+}
+
+@app.get("/api/balance", response_model=BalanceResponse)
+async def get_balance(account_id: str = Query(...)):
+    """
+    Get account balance for payment processing
+    """
+    account = MOCK_ACCOUNTS.get(account_id, MOCK_ACCOUNTS["ACC00001"])
+    return BalanceResponse(**account)
+
+@app.post("/api/payment", response_model=PaymentResponse)
+async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)):
+    """
+    Process a payment transaction
+    """
+    transaction_id = request.transaction_id or f"TXN{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    
+    # Create transaction record in database
+    try:
+        db_transaction = TransactionModel(
+            transaction_id=transaction_id,
+            merchant_id=request.signals[0].get("merchant_id", "MER0005") if request.signals else "MER0005",
+            customer_id="CUS00001",
+            account_id=request.account_id,
+            device_id="DEV0001",
+            ip_address="192.168.4.12",
+            payment_instrument_id="PI0001",
+            amount=request.amount,
+            timestamp=datetime.datetime.utcnow(),
+            status="completed",
+            is_fraudulent=False,
+            fraud_ring_id=None,
+        )
+        db.add(db_transaction)
+        db.commit()
+    except Exception:
+        db.rollback()
+    
+    return PaymentResponse(
+        status="completed",
+        message="Payment processed successfully via FraudMesh AI",
+        transaction_id=transaction_id,
+        timestamp=datetime.datetime.utcnow().isoformat(),
+        amount=request.amount,
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
 

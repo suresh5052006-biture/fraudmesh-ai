@@ -7,7 +7,24 @@ const api = axios.create({
   timeout: 30000,
 });
 
-const MOCK_MODE = true;
+// Set to false when backend is running, or it auto-detects
+let MOCK_MODE = false;
+
+const checkBackendConnection = async () => {
+  try {
+    await api.get('/health');
+    return false;
+  } catch {
+    return true;
+  }
+};
+
+const initMockMode = async () => {
+  MOCK_MODE = await checkBackendConnection();
+  console.log(MOCK_MODE ? 'Using MOCK API' : 'Using REAL backend API');
+};
+
+initMockMode();
 
 const MOCK_DATA = {
   balance: { balance: 12500.00, account_id: 'ACC00001', currency: 'USD' },
