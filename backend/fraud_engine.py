@@ -229,7 +229,7 @@ def get_unusual_timing(db: Session, account_id: str, current_timestamp: datetime
     return score, signals
 
 
-def get_suspicious_entities(db: Session, transaction: Transaction) -> Tuple[int, List[str]]:
+def get_suspicious_entities(db: Session, transaction: Dict[str, Any]) -> Tuple[int, List[str]]:
     """
     Check if transaction involves known suspicious entities
     (devices, IPs, etc. that appear in fraud rings)
@@ -238,8 +238,8 @@ def get_suspicious_entities(db: Session, transaction: Transaction) -> Tuple[int,
     score = 0
 
     # Check device risk
-    if transaction.device_id:
-        device = db.query(Device).filter(Device.device_id == transaction.device_id).first()
+    if transaction.get("device_id"):
+        device = db.query(Device).filter(Device.device_id == transaction["device_id"]).first()
         if device:
             if device.is_rooted:
                 signals.append("Rooted/jailbroken device detected")
@@ -249,8 +249,8 @@ def get_suspicious_entities(db: Session, transaction: Transaction) -> Tuple[int,
                 score += 20
 
     # Check IP address risk
-    if transaction.ip_address:
-        ip_info = db.query(IpAddress).filter(IpAddress.ip_address == transaction.ip_address).first()
+    if transaction.get("ip_address"):
+        ip_info = db.query(IpAddress).filter(IpAddress.ip_address == transaction["ip_address"]).first()
         if ip_info:
             if ip_info.is_vpn:
                 signals.append("VPN detected")
@@ -266,8 +266,8 @@ def get_suspicious_entities(db: Session, transaction: Transaction) -> Tuple[int,
                 score += 12
 
     # Check merchant risk
-    if transaction.merchant_id:
-        merchant = db.query(Merchant).filter(Merchant.merchant_id == transaction.merchant_id).first()
+    if transaction.get("merchant_id"):
+        merchant = db.query(Merchant).filter(Merchant.merchant_id == transaction["merchant_id"]).first()
         if merchant and merchant.risk_level == "high":
             signals.append(f"High-risk merchant category: {merchant.category}")
             score += 8
@@ -275,7 +275,7 @@ def get_suspicious_entities(db: Session, transaction: Transaction) -> Tuple[int,
     return score, signals
 
 
-def get_cross_entity_connections(db: Session, transaction: Transaction, account: Account) -> Tuple[int, List[str]]:
+def get_cross_entity_connections(db: Session, transaction: Dict[str, Any], account: Account) -> Tuple[int, List[str]]:
     """
     Detect if account is connected to suspicious entities via graph analysis
     (e.g., same device/IP as known fraud account)
@@ -284,9 +284,9 @@ def get_cross_entity_connections(db: Session, transaction: Transaction, account:
     score = 0
 
     # Check if this device has been used for fraudulent transactions
-    if transaction.device_id:
+    if transaction.get("device_id"):
         fraud_txns = db.query(Transaction).filter(
-            Transaction.device_id == transaction.device_id,
+            Transaction.device_id == transaction["device_id"],
             Transaction.is_fraudulent == True
         ).count()
 
@@ -295,9 +295,9 @@ def get_cross_entity_connections(db: Session, transaction: Transaction, account:
             score += 25
 
     # Check if this IP has been used for fraudulent transactions
-    if transaction.ip_address:
+    if transaction.get("ip_address"):
         fraud_txns = db.query(Transaction).filter(
-            Transaction.ip_address == transaction.ip_address,
+            Transaction.ip_address == transaction["ip_address"],
             Transaction.is_fraudulent == True
         ).count()
 
@@ -306,9 +306,9 @@ def get_cross_entity_connections(db: Session, transaction: Transaction, account:
             score += 22
 
     # Check if payment instrument is reused across many accounts
-    if transaction.payment_instrument_id:
+    if transaction.get("payment_instrument_id"):
         pi = db.query(PaymentInstrument).filter(
-            PaymentInstrument.payment_instrument_id == transaction.payment_instrument_id
+            PaymentInstrument.payment_instrument_id == transaction["payment_instrument_id"]
         ).first()
 
         if pi:
@@ -316,7 +316,7 @@ def get_cross_entity_connections(db: Session, transaction: Transaction, account:
             accounts_using_pi = db.query(
                 func.count(func.distinct(Transaction.account_id))
             ).filter(
-                Transaction.payment_instrument_id == transaction.payment_instrument_id
+                Transaction.payment_instrument_id == transaction["payment_instrument_id"]
             ).scalar() or 0
 
             if accounts_using_pi >= 3:

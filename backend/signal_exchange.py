@@ -297,8 +297,10 @@ def match_transaction_against_signals(
     if not signals:
         return {
             "matches": [],
+            "transaction_signals": [],
             "total_signals_checked": 0,
             "has_match": False,
+            "best_match": None,
             "recommended_action": "ALLOW"
         }
 
@@ -439,8 +441,6 @@ def generate_signals_from_transactions(db: Session, merchant_id: str, limit: int
 
     for device_id, accounts in device_accounts.items():
         if len(accounts) >= 3:
-            device = db.query("devices").filter_by(device_id=device_id).first() if hasattr(db, 'query') else None
-
             signals_list = ["device_reuse", "multi_account_activity"]
             criteria = {
                 "required_signals": signals_list,

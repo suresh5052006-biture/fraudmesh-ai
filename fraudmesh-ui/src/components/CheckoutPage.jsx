@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShoppingBag, ArrowLeft, Shield, ChevronRight } from 'lucide-react';
+import { ShoppingBag, ArrowLeft, Shield, ChevronRight, XCircle } from 'lucide-react';
 import ProductStorefront from './ProductStorefront';
 import PaymentMethodSelector from './PaymentMethodSelector';
 import FraudGateOverlay from './FraudGateOverlay';
@@ -38,10 +38,15 @@ const CheckoutPage = () => {
   const [riskResult, setRiskResult] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [blockReason, setBlockReason] = useState('DEFAULT');
+  const [riskError, setRiskError] = useState(null);
+  const [paymentError, setPaymentError] = useState(null);
+  const [paymentResult, setPaymentResult] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [paymentAttemptId, setPaymentAttemptId] = useState(null);
 
   const cartTotal = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const cartCount = cart.reduce((sum, item) => sum + item.quantity, 0);
-  const totalWithTax = cartTotal * 1.08;
+  const totalWithTax = Math.round(cartTotal * 1.08 * 100) / 100;
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
@@ -52,8 +57,13 @@ const CheckoutPage = () => {
     if (cart.length === 0 || processing) return;
 
     setProcessing(true);
-    setShowFraudGate(true);
+    setRiskError(null);
+    setPaymentError(null);
+    // Generated once per attempt so the OTP step and the receipt reference the
+    // same id the backend records.
+    setPaymentAttemptId(`TXN${Date.now().toString()}${Math.floor(Math.random() * 1000)}`);
 
+    let risk;
     try {
       const txnData = {
         merchant_id: 'MER0005',
@@ -68,14 +78,17 @@ const CheckoutPage = () => {
       };
 
       const result = await apiService.checkRisk(txnData);
-      setRiskResult(result);
+      risk = result;
     } catch (e) {
-      setRiskResult({
-        risk_score: Math.floor(Math.random() * 30) + 10,
-        recommended_action: 'ALLOW',
-        signals: []
-      });
+      // Fail closed: without a server verdict the payment must not proceed.
+      setShowFraudGate(false);
+      setProcessing(false);
+      setRiskError('Unable to reach FraudMesh AI risk service. Payment blocked.');
+      return;
     }
+
+    setRiskResult(risk);
+    setShowFraudGate(true);
   };
 
   const handleFraudGateComplete = ({ verdict, riskScore, action }) => {
@@ -93,21 +106,28 @@ const CheckoutPage = () => {
   };
 
   const processPayment = async () => {
+    if (submitting) return;
+    setSubmitting(true);
+    setPaymentError(null);
+
     try {
       const paymentPayload = {
         account_id: accountId,
         amount: totalWithTax,
         payment_method: paymentMethod,
-        risk_score: riskResult?.risk_score || 0,
-        signals: riskResult?.signals || [],
-        transaction_id: 'TXN' + Date.now().toString().slice(-8),
+        transaction_id: paymentAttemptId,
       };
-      
-      await apiService.processPayment(paymentPayload);
+
+      const result = await apiService.processPayment(paymentPayload);
+      setPaymentResult(result);
+      setProcessing(false);
       setShowSuccess(true);
     } catch (e) {
-      console.error('Payment processing error:', e);
-      setShowSuccess(true);
+      // A declined or failed payment must never render the success screen.
+      setProcessing(false);
+      setPaymentError(e?.response?.data?.detail || 'Payment could not be completed.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -294,6 +314,12 @@ const CheckoutPage = () => {
                   Your payment is protected by FraudMesh AI which analyzes 8+ risk signals in real-time.
                 </p>
                 <div className="space-y-2">
+                  {riskError && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-800 bg-red-950/60 px-3 py-2 text-xs text-red-200">
+                      <XCircle size={14} className="mt-0.5 shrink-0 text-red-400" />
+                      <span>{riskError}</span>
+                    </div>
+                  )}
                   {['Velocity Check', 'Device Fingerprint', 'Network Analysis', 'Behavioral Analysis', 'Merchant Risk'].map((check, i) => (
                     <div key={i} className="flex items-center gap-2 text-xs">
                       <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
@@ -334,15 +360,24 @@ const CheckoutPage = () => {
         isVisible={showSuccess}
         onContinue={handleSuccessContinue}
         transactionDetails={{
-          amount: totalWithTax,
-          riskScore: riskResult?.risk_score || 0,
-          riskLevel: getRiskLevel(riskResult?.risk_score || 0),
+          amount: paymentResult?.amount ?? totalWithTax,
+          riskScore: paymentResult?.risk_score ?? riskResult?.risk_score ?? 0,
+          riskLevel: getRiskLevel(paymentResult?.risk_score ?? riskResult?.risk_score ?? 0),
           paymentMethod,
           merchant: 'FraudMesh Store',
-          transactionId: 'TXN' + Date.now().toString().slice(-8),
-          timestamp: new Date().toISOString()
+          transactionId: paymentResult?.transaction_id ?? paymentAttemptId,
+          timestamp: paymentResult?.timestamp ?? new Date().toISOString()
         }}
       />
+
+      {paymentError && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <div className="flex items-center gap-2 rounded-lg border border-red-800 bg-red-950/90 px-4 py-3 text-sm text-red-200">
+            <XCircle size={16} className="text-red-400" />
+            {paymentError}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

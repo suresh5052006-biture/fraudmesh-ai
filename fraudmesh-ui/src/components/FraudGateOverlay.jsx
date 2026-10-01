@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Shield, Scan, CheckCircle, AlertTriangle, XCircle, Loader2 } from 'lucide-react';
 import soundService from '../services/audio';
 
@@ -20,6 +20,9 @@ const FraudGateOverlay = ({ isVisible, onComplete, riskResult }) => {
   const [verdict, setVerdict] = useState(null);
   const [riskScore, setRiskScore] = useState(0);
 
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
+
   useEffect(() => {
     if (!isVisible) {
       setProgress(0);
@@ -30,8 +33,13 @@ const FraudGateOverlay = ({ isVisible, onComplete, riskResult }) => {
       return;
     }
 
+    // Never start (or complete) the scan without a server verdict. Running the
+    // animation against a null result would resolve every payment as ALLOW.
+    if (!riskResult) return;
+
     soundService.playScan();
     let stepIndex = 0;
+    let timeout;
     const interval = setInterval(() => {
       if (stepIndex < SCAN_STEPS.length) {
         setSteps(prev => prev.map((s, i) => {
@@ -44,29 +52,40 @@ const FraudGateOverlay = ({ isVisible, onComplete, riskResult }) => {
         stepIndex++;
       } else {
         clearInterval(interval);
-        const finalScore = riskResult?.risk_score || 0;
+        const finalScore = riskResult?.risk_score ?? 0;
         const action = riskResult?.recommended_action || 'ALLOW';
         setRiskScore(finalScore);
-        
+
+        let finalVerdict;
         if (action === 'BLOCK') {
+          finalVerdict = 'blocked';
           setVerdict('blocked');
           soundService.playAlert();
         } else if (action === 'STEP_UP') {
+          finalVerdict = 'stepup';
           setVerdict('stepup');
           soundService.playStepUp();
         } else {
+          finalVerdict = 'cleared';
           setVerdict('cleared');
           soundService.playApproved();
         }
 
-        setTimeout(() => {
-          onComplete?.({ verdict, riskScore: finalScore, action });
+        timeout = setTimeout(() => {
+          onCompleteRef.current?.({
+            verdict: finalVerdict,
+            riskScore: finalScore,
+            action,
+          });
         }, 1500);
       }
     }, 400);
 
-    return () => clearInterval(interval);
-  }, [isVisible]);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [isVisible, riskResult]);
 
   if (!isVisible) return null;
 
