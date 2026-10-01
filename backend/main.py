@@ -4,12 +4,16 @@ Hackathon MVP for Razorpay AI Risk Manager Track
 """
 
 import math
+import uuid
+import logging
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, Depends, Query
+from fastapi import FastAPI, Depends, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import datetime
+
+logger = logging.getLogger(__name__)
 
 import sys
 import os
@@ -33,9 +37,15 @@ app = FastAPI(
 )
 
 # CORS middleware for frontend integration
+ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("ALLOWED_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -153,13 +163,13 @@ class SignalPublishRequest(BaseModel):
     publisher_id: str
     pattern_type: str
     signals: List[str]
-    confidence: float
+    confidence: float = Field(ge=0.0, le=1.0)
     matching_criteria: Dict[str, Any]
     device_fingerprints: Optional[List[str]] = None
     ip_patterns: Optional[List[Dict]] = None
     account_behavior: Optional[Dict] = None
     transaction_patterns: Optional[Dict] = None
-    expires_in_days: Optional[int] = 30
+    expires_in_days: Optional[int] = Field(default=30, ge=1, le=365)
 
 
 class SignalResponse(BaseModel):
@@ -627,8 +637,11 @@ class PaymentRequest(BaseModel):
     account_id: str
     amount: float
     payment_method: str = "card"
-    risk_score: int = 0
-    signals: List[Dict[str, Any]] = []
+    merchant_id: str = "MER0005"
+    customer_id: str = "CUS00001"
+    device_id: str = "DEV0001"
+    ip_address: str = "192.168.4.12"
+    payment_instrument_id: str = "PI0001"
     transaction_id: Optional[str] = None
 
 class PaymentResponse(BaseModel):
@@ -637,12 +650,9 @@ class PaymentResponse(BaseModel):
     transaction_id: str
     timestamp: str
     amount: float
-
-class Account(BaseModel):
-    id: str
-    account_id: str
-    balance: float
-    currency: str = "USD"
+    risk_score: int
+    risk_level: str
+    recommended_action: str
 
 MOCK_ACCOUNTS = {
     "ACC00001": {"id": "1", "account_id": "ACC00001", "balance": 12500.00, "currency": "USD"},
@@ -655,43 +665,93 @@ async def get_balance(account_id: str = Query(...)):
     """
     Get account balance for payment processing
     """
-    account = MOCK_ACCOUNTS.get(account_id, MOCK_ACCOUNTS["ACC00001"])
-    return BalanceResponse(**account)
+    if account_id not in MOCK_ACCOUNTS:
+        raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
+    return BalanceResponse(**MOCK_ACCOUNTS[account_id])
 
 @app.post("/api/payment", response_model=PaymentResponse)
 async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)):
     """
-    Process a payment transaction
+    Process a payment transaction.
+
+    The fraud verdict is computed server-side from the transaction data; the
+    client cannot supply or influence it. A payment is declined unless the
+    engine recommends ALLOW or STEP_UP.
     """
-    transaction_id = request.transaction_id or f"TXN{datetime.datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-    
-    # Create transaction record in database
-    try:
-        db_transaction = TransactionModel(
-            transaction_id=transaction_id,
-            merchant_id=request.signals[0].get("merchant_id", "MER0005") if request.signals else "MER0005",
-            customer_id="CUS00001",
-            account_id=request.account_id,
-            device_id="DEV0001",
-            ip_address="192.168.4.12",
-            payment_instrument_id="PI0001",
-            amount=request.amount,
-            timestamp=datetime.datetime.utcnow(),
-            status="completed",
-            is_fraudulent=False,
-            fraud_ring_id=None,
+    if request.amount <= 0:
+        raise HTTPException(status_code=400, detail="Amount must be greater than zero")
+
+    transaction_id = request.transaction_id or f"TXN{uuid.uuid4().hex[:12].upper()}"
+
+    existing = db.query(TransactionModel).filter(
+        TransactionModel.transaction_id == transaction_id
+    ).first()
+    if existing:
+        raise HTTPException(
+            status_code=409, detail=f"Transaction {transaction_id} already exists"
         )
+
+    if request.account_id not in MOCK_ACCOUNTS:
+        raise HTTPException(status_code=404, detail=f"Account {request.account_id} not found")
+
+    timestamp = datetime.datetime.utcnow()
+
+    risk_result = calculate_transaction_risk(db, {
+        "transaction_id": transaction_id,
+        "account_id": request.account_id,
+        "merchant_id": request.merchant_id,
+        "customer_id": request.customer_id,
+        "device_id": request.device_id,
+        "payment_instrument_id": request.payment_instrument_id,
+        "ip_address": request.ip_address,
+        "amount": request.amount,
+        "timestamp": timestamp,
+    })
+
+    action = risk_result["recommended_action"]
+    is_fraudulent = action in ("BLOCK", "REVIEW")
+    status = "completed" if action in ("ALLOW", "STEP_UP") else "declined"
+
+    db_transaction = TransactionModel(
+        transaction_id=transaction_id,
+        merchant_id=request.merchant_id,
+        customer_id=request.customer_id,
+        account_id=request.account_id,
+        device_id=request.device_id,
+        ip_address=request.ip_address,
+        payment_instrument_id=request.payment_instrument_id,
+        amount=request.amount,
+        timestamp=timestamp,
+        status=status,
+        is_fraudulent=is_fraudulent,
+        fraud_ring_id=None,
+    )
+
+    try:
         db.add(db_transaction)
+        if status == "completed":
+            MOCK_ACCOUNTS[request.account_id]["balance"] -= request.amount
         db.commit()
     except Exception:
         db.rollback()
-    
+        logger.exception("Failed to persist payment %s", transaction_id)
+        raise HTTPException(status_code=500, detail="Payment could not be recorded")
+
+    message = (
+        "Payment processed successfully via FraudMesh AI"
+        if status == "completed"
+        else f"Payment declined by FraudMesh AI ({action})"
+    )
+
     return PaymentResponse(
-        status="completed",
-        message="Payment processed successfully via FraudMesh AI",
+        status=status,
+        message=message,
         transaction_id=transaction_id,
-        timestamp=datetime.datetime.utcnow().isoformat(),
+        timestamp=timestamp.isoformat(),
         amount=request.amount,
+        risk_score=risk_result["risk_score"],
+        risk_level=risk_result["risk_level"],
+        recommended_action=action,
     )
 
 
