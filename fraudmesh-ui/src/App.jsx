@@ -1,27 +1,56 @@
-import { useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
-import Dashboard from './components/Dashboard'
-import FraudSignals from './components/FraudSignals'
-import RiskCheck from './components/RiskCheck'
-import DemoFlow from './components/DemoFlow'
-import AIAgentConsole from './components/AIAgentConsole'
-import CheckoutPage from './components/CheckoutPage'
-import soundService from './services/audio'
-import { Menu, X, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react';
+import { Routes, Route, Navigate, useLocation, Link } from 'react-router-dom';
+import Dashboard from './components/Dashboard';
+import FraudSignals from './components/FraudSignals';
+import RiskCheck from './components/RiskCheck';
+import DemoFlow from './components/DemoFlow';
+import AIAgentConsole from './components/AIAgentConsole';
+import CheckoutPage from './components/CheckoutPage';
+import soundService from './services/audio';
+import apiService from './services/api';
+import { Menu, X, Shield, Activity, ShieldCheck, Zap, Bot, Bell } from 'lucide-react';
 import Sidebar from './components/Sidebar';
+
+const ROUTE_META = {
+  '/dashboard':  { title: 'Executive Risk Dashboard', subtitle: 'Live transaction telemetry & graph cluster topology' },
+  '/risk-check': { title: '9-Signal Forensic Risk Radar', subtitle: 'Deterministic score calculation with explainable vectors' },
+  '/signals':    { title: 'Privacy-Preserving Signal Exchange', subtitle: 'Zero-PII decentralized cross-merchant intelligence pool' },
+  '/checkout':   { title: 'Merchant Gateway Checkout Simulator', subtitle: 'End-user payment flow with automatic 3DS / OTP step-up' },
+  '/agent':      { title: 'FraudMesh Sentinel AI Investigator', subtitle: 'Autonomous forensic reasoning & risk policy advisor' },
+  '/simulation': { title: 'End-to-End Fraud Attack Simulator', subtitle: 'Live coordinated ring attack detection demonstration' },
+};
 
 function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [backendStatus, setBackendStatus] = useState('checking');
+  const location = useLocation();
+
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await apiService.getHealth();
+        setBackendStatus(res?.service ? 'connected' : 'mock');
+      } catch {
+        setBackendStatus('mock');
+      }
+    };
+    checkStatus();
+  }, []);
 
   const toggleSound = () => {
     const nextState = soundService.toggleSound();
     setSoundEnabled(nextState);
   };
 
+  const currentMeta = ROUTE_META[location.pathname] || {
+    title: 'FraudMesh AI',
+    subtitle: 'Decentralized Fraud Signal Exchange',
+  };
+
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg-base)' }}>
-      {/* Sidebar */}
+    <div className="flex h-screen overflow-hidden bg-[#060a14] text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
+      {/* Sidebar Navigation */}
       <Sidebar
         mobileMenuOpen={mobileMenuOpen}
         setMobileMenuOpen={setMobileMenuOpen}
@@ -30,56 +59,67 @@ function App() {
         soundService={soundService}
       />
 
-      {/* Mobile overlay */}
+      {/* Mobile Backdrop Overlay */}
       {mobileMenuOpen && (
         <div
           onClick={() => setMobileMenuOpen(false)}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-            backdropFilter: 'blur(4px)', zIndex: 40,
-          }}
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 lg:hidden"
         />
       )}
 
-      {/* Main content area */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-        {/* Mobile top bar */}
-        <div
-          className="lg:hidden"
-          style={{
-            padding: '0.875rem 1.25rem',
-            background: 'rgba(6,10,20,0.95)',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            position: 'sticky', top: 0, zIndex: 30, backdropFilter: 'blur(16px)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 8,
-              background: 'linear-gradient(135deg, #4f46e5, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <Shield size={16} color="#fff" />
-            </div>
-            <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: '#f1f5f9', letterSpacing: '-0.02em' }}>
-              FraudMesh AI
-            </span>
-          </div>
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            style={{
-              padding: '0.375rem', borderRadius: 8, cursor: 'pointer',
-              background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)',
-              color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >
-            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
-          </button>
-        </div>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col overflow-hidden relative">
+        {/* Top Header Bar */}
+        <header className="h-16 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl px-4 sm:px-6 flex items-center justify-between sticky top-0 z-30">
+          {/* Left: Mobile Toggle & Page Title */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden p-2 rounded-lg bg-slate-900 border border-slate-800 text-slate-400 hover:text-white"
+            >
+              {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
 
-        {/* Scrollable page content */}
-        <div style={{ flex: 1, overflowY: 'auto', position: 'relative', zIndex: 1 }}>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-2">
+                  {currentMeta.title}
+                </h1>
+              </div>
+              <p className="hidden sm:block text-xs text-slate-400 truncate">
+                {currentMeta.subtitle}
+              </p>
+            </div>
+          </div>
+
+          {/* Right: Status Pill & Quick Action Links */}
+          <div className="flex items-center gap-2.5">
+            {/* Backend Connectivity Badge */}
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-mono text-slate-300">
+              <span className={`w-2 h-2 rounded-full ${backendStatus === 'connected' ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
+              <span>{backendStatus === 'connected' ? 'Live API Connected' : 'Mock Shield Active'}</span>
+            </div>
+
+            {/* Merchant ID Tag */}
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/25 text-[11px] font-mono text-indigo-300">
+              <ShieldCheck size={12} className="text-indigo-400" />
+              <span>Merchant: MER0005 (Active)</span>
+            </div>
+
+            {/* Quick Action Button to Sentinel */}
+            <Link
+              to="/agent"
+              onClick={() => soundService.playClick()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition shadow-sm shadow-indigo-600/30"
+            >
+              <Bot size={14} />
+              <span className="hidden sm:inline">Ask AI Sentinel</span>
+            </Link>
+          </div>
+        </header>
+
+        {/* Scrollable Page Canvas */}
+        <main className="flex-1 overflow-y-auto bg-gradient-to-b from-[#060a14] via-[#080e1e] to-[#060a14] relative">
           <Routes>
             <Route path="/"            element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard"   element={<Dashboard />} />
@@ -89,7 +129,7 @@ function App() {
             <Route path="/agent"       element={<AIAgentConsole />} />
             <Route path="/simulation"  element={<DemoFlow />} />
           </Routes>
-        </div>
+        </main>
       </div>
     </div>
   );

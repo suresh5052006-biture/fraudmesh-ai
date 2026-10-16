@@ -21,7 +21,9 @@ const FraudGateOverlay = ({ isVisible, onComplete, riskResult }) => {
   const [riskScore, setRiskScore] = useState(0);
 
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!isVisible) {
@@ -124,15 +126,26 @@ const FraudGateOverlay = ({ isVisible, onComplete, riskResult }) => {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-sm">
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-indigo-950/50 via-transparent to-cyan-950/30" />
-        {[...Array(20)].map((_, i) => (
+        {[
+          { left: '15%', top: '22%', delay: '0.2s', duration: '2.5s' },
+          { left: '25%', top: '68%', delay: '0.8s', duration: '3.1s' },
+          { left: '42%', top: '15%', delay: '0.4s', duration: '2.8s' },
+          { left: '58%', top: '80%', delay: '1.2s', duration: '3.4s' },
+          { left: '72%', top: '35%', delay: '0.6s', duration: '2.6s' },
+          { left: '85%', top: '62%', delay: '1.4s', duration: '3.0s' },
+          { left: '30%', top: '45%', delay: '1.0s', duration: '2.9s' },
+          { left: '68%', top: '18%', delay: '0.3s', duration: '3.2s' },
+          { left: '12%', top: '78%', delay: '1.6s', duration: '2.7s' },
+          { left: '90%', top: '28%', delay: '0.5s', duration: '3.3s' },
+        ].map((p, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-indigo-400/30 rounded-full animate-ping"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 2}s`,
-              animationDuration: `${2 + Math.random() * 2}s`
+              left: p.left,
+              top: p.top,
+              animationDelay: p.delay,
+              animationDuration: p.duration
             }}
           />
         ))}

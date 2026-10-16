@@ -41,21 +41,29 @@ const TransactionHistory = ({ accountId = 'ACC00001', compact = false }) => {
   const loadTransactions = async () => {
     setLoading(true);
     try {
-      const data = await apiService.getTransactions(1, 20, false);
-      if (data.transactions) {
-        setTransactions(data.transactions.map(t => ({
-          id: t.id || t.transaction_id,
-          amount: t.amount,
-          merchant: t.merchant_id || 'Merchant',
-          date: t.timestamp || new Date().toISOString(),
-          riskScore: t.risk_score || Math.floor(Math.random() * 100),
-          action: t.recommended_action || 'ALLOW',
-          status: t.status || 'completed',
-          paymentMethod: t.payment_method || 'card',
-          signals: t.signals || []
-        })));
+      const data = await apiService.getTransactions(1, 25, false);
+      const txList = data.transactions || data.items || [];
+      if (txList.length > 0) {
+        setTransactions(txList.map(t => {
+          let act = t.recommended_action;
+          if (!act) {
+            if (t.status === 'declined' || t.is_fraudulent) act = 'BLOCK';
+            else act = 'ALLOW';
+          }
+          return {
+            id: t.id || t.transaction_id,
+            amount: t.amount,
+            merchant: t.merchant_id || 'Merchant',
+            date: t.timestamp || new Date().toISOString(),
+            riskScore: t.risk_score ?? (act === 'BLOCK' ? 88 : 15),
+            action: act,
+            status: t.status || 'completed',
+            paymentMethod: t.payment_method || 'card',
+            signals: t.signals || (t.fraud_ring_id ? [{ signal_type: `ring_${t.fraud_ring_id.toLowerCase()}`, score_contribution: 35 }] : [])
+          };
+        }));
       }
-    } catch (e) {
+    } catch {
       setTransactions(DEMO_TRANSACTIONS);
     }
     setLoading(false);

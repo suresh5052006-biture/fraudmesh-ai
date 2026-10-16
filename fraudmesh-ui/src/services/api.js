@@ -106,19 +106,31 @@ export const apiService = {
     const response = await api.get('/transactions', {
       params: { page, page_size: pageSize, fraud_only: fraudOnly },
     });
-    return response.data;
+    const data = response.data || {};
+    const txns = data.items || data.transactions || [];
+    return {
+      ...data,
+      total: data.total ?? txns.length,
+      transactions: txns,
+      items: txns,
+    };
   },
 
   checkRisk: async (transactionData) => {
     if (MOCK_MODE) {
-      await delay(1500 + Math.random() * 1000);
+      await delay(1200 + Math.random() * 800);
       return generateRiskResponse(transactionData.amount, transactionData.payment_method);
     }
-    const response = await api.post('/risk/check', transactionData);
+    const payload = {
+      ...transactionData,
+      amount: parseFloat(transactionData.amount) || 0,
+      timestamp: transactionData.timestamp || new Date().toISOString()
+    };
+    const response = await api.post('/risk/check', payload);
     return response.data;
   },
 
-  getNetwork: async (limit = 5000) => {
+  getNetwork: async (limit = 500) => {
     if (MOCK_MODE) {
       await delay(500);
       return MOCK_DATA.network;
@@ -135,7 +147,7 @@ export const apiService = {
     const response = await api.get('/signals', {
       params: { active_only: activeOnly, min_severity: minSeverity, limit },
     });
-    return response.data;
+    return Array.isArray(response.data) ? response.data : (response.data?.items || []);
   },
 
   publishSignal: async (signalData) => {
