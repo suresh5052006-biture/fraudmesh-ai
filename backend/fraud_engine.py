@@ -423,22 +423,22 @@ def calculate_transaction_risk(db: Session, transaction: Dict[str, Any]) -> Dict
     ).first()
 
     if not account:
-        return {
-            "risk_score": 0,
-            "risk_level": RiskLevel.LOW.value,
-            "signals": [{"signal_type": "account_not_found", "description": "Account not found", "score_contribution": 0}],
-            "recommended_action": RecommendedAction.ALLOW.value,
-        }
-
-    # Signal 1: Transaction Velocity
-    velocity_score, velocity_signals = get_transaction_velocity(db, transaction.get("account_id"), 60)
-    score += velocity_score
-    for sig in velocity_signals:
+        score += 45
         signal_list.append({
-            "signal_type": "transaction_velocity",
-            "description": sig,
-            "score_contribution": velocity_score / len(velocity_signals) if velocity_signals else 0,
+            "signal_type": "unregistered_account",
+            "description": "Account not found in merchant directory (unverified entity)",
+            "score_contribution": 45.0,
         })
+    else:
+        # Signal 1: Transaction Velocity
+        velocity_score, velocity_signals = get_transaction_velocity(db, transaction.get("account_id"), 60)
+        score += velocity_score
+        for sig in velocity_signals:
+            signal_list.append({
+                "signal_type": "transaction_velocity",
+                "description": sig,
+                "score_contribution": velocity_score / len(velocity_signals) if velocity_signals else 0,
+            })
 
     # Signal 2: Device Velocity
     if transaction.get("device_id"):
@@ -522,8 +522,8 @@ def calculate_transaction_risk(db: Session, transaction: Dict[str, Any]) -> Dict
             "score_contribution": customer_score / len(customer_signals) if customer_signals else 0,
         })
 
-    # Cap score at 100
-    final_score = min(int(score), 100)
+    # Cap score between 0 and 100
+    final_score = max(0, min(int(score), 100))
     risk_level = score_to_risk_level(final_score)
     recommendation = score_to_recommendation(final_score, risk_level)
 

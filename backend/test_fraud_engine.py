@@ -6,6 +6,13 @@ Tests the fraud risk calculation with synthetic transactions
 import json
 import sys
 import os
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import SessionLocal, init_db, seed_database
@@ -109,13 +116,22 @@ def test_fraud_risk_engine():
         print("="*60)
 
         # Get multiple transactions from same payment instrument
-        pi_txns = db.query(TransactionModel).filter(
-            TransactionModel.payment_instrument_id != None
+        from sqlalchemy import func
+        pi_candidate = db.query(
+            TransactionModel.payment_instrument_id
+        ).filter(
+            TransactionModel.payment_instrument_id.isnot(None)
         ).group_by(
             TransactionModel.payment_instrument_id
         ).having(
-            # This is a simplified check - in real code use func.count()
-        ).limit(1).all()
+            func.count(TransactionModel.transaction_id) > 1
+        ).first()
+
+        pi_txns = []
+        if pi_candidate and pi_candidate[0]:
+            pi_txns = db.query(TransactionModel).filter(
+                TransactionModel.payment_instrument_id == pi_candidate[0]
+            ).limit(1).all()
 
         if pi_txns:
             test_txn = pi_txns[0]

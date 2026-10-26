@@ -5,6 +5,8 @@ Enables merchants to share fraud intelligence without exposing personal data
 
 import json
 import uuid
+import os
+import hashlib
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional, Set
 from enum import Enum
@@ -69,11 +71,11 @@ class ExchangeFraudSignal(Base):
     match_count = Column(Integer, default=0)
 
 
-def create_device_fingerprint(device_id: str, device_type: str, os: str) -> str:
-    """Create anonymized device fingerprint (hashed)"""
-    # Use only device characteristics, not the actual ID
-    fingerprint_input = f"{device_type}:{os}"
-    return fingerprint_input
+def create_device_fingerprint(device_id: str, device_type: str, os_name: str) -> str:
+    """Create anonymized device fingerprint (salted SHA-256 hash)"""
+    salt = os.getenv("DEVICE_SALT", "fraudmesh_zk_salt_2026")
+    raw = f"{salt}:{device_id}:{device_type}:{os_name}"
+    return f"DFP-{hashlib.sha256(raw.encode('utf-8')).hexdigest()[:16]}"
 
 
 def create_ip_pattern(ip_address: str) -> Dict[str, Any]:
