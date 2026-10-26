@@ -20,7 +20,7 @@ import os
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import get_db, init_db, seed_database, SessionLocal
-from models import Transaction as TransactionModel
+from models import Transaction as TransactionModel, Account as AccountModel
 from fraud_engine import calculate_transaction_risk
 from fraud_network import get_fraud_network
 from signal_exchange import (
@@ -29,6 +29,7 @@ from signal_exchange import (
 )
 from investigator import investigate_transaction
 from demo import run_hackathon_demo
+from auth import require_auth, verify_merchant_ownership, AuthContext
 
 app = FastAPI(
     title="FraudMesh AI",
@@ -268,10 +269,17 @@ async def get_transactions(
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     fraud_only: bool = Query(False, description="Filter to fraudulent transactions only"),
+    merchant_id: Optional[str] = Query(None, description="Optional merchant filter"),
+    auth: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """Get paginated list of transactions"""
     query = db.query(TransactionModel)
+
+    # Tenant isolation: restrict non-admin to their merchant transactions if requested or assigned
+    active_merchant = merchant_id or (auth.merchant_id if not auth.is_admin else None)
+    if active_merchant:
+        query = query.filter(TransactionModel.merchant_id == active_merchant)
 
     if fraud_only:
         query = query.filter(TransactionModel.is_fraudulent == True)
@@ -313,6 +321,7 @@ async def get_transactions(
 @app.post("/api/risk/check", response_model=RiskCheckResponse)
 async def check_transaction_risk(
     request: RiskCheckRequest,
+    auth: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """
@@ -324,6 +333,7 @@ async def check_transaction_risk(
         - signals: List of fraud signals detected
         - recommended_action: ALLOW, STEP_UP, REVIEW, or BLOCK
     """
+    verify_merchant_ownership(auth, request.merchant_id)
     # Prepare transaction dict for risk engine
     transaction = {
         "transaction_id": request.transaction_id or "tmp_check",
@@ -397,6 +407,7 @@ async def get_fraud_network_graph(
 @app.post("/api/signals/publish", response_model=SignalResponse)
 async def publish_fraud_signal(
     request: SignalPublishRequest,
+    auth: AuthContext = Depends(require_auth),
     db: Session = Depends(get_db)
 ):
     """
@@ -412,6 +423,7 @@ async def publish_fraud_signal(
     - IP patterns (subnets, not exact IPs)
     - Behavioral signals (velocity, hopping, reuse)
     """
+    verify_merchant_ownership(auth, request.publisher_id)
     signal = publish_signal(
         db=db,
         publisher_id=request.publisher_id,
@@ -661,16 +673,27 @@ MOCK_ACCOUNTS = {
 }
 
 @app.get("/api/balance", response_model=BalanceResponse)
-async def get_balance(account_id: str = Query(...)):
+async def get_balance(account_id: str = Query(...), db: Session = Depends(get_db)):
     """
-    Get account balance for payment processing
+    Get account balance for payment processing from DB with fallback
     """
-    if account_id not in MOCK_ACCOUNTS:
-        raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
-    return BalanceResponse(**MOCK_ACCOUNTS[account_id])
+    db_account = db.query(AccountModel).filter(AccountModel.account_id == account_id).first()
+    if db_account:
+        return BalanceResponse(
+            account_id=db_account.account_id,
+            balance=float(db_account.balance or 0.0),
+            currency="USD"
+        )
+    if account_id in MOCK_ACCOUNTS:
+        return BalanceResponse(**MOCK_ACCOUNTS[account_id])
+    raise HTTPException(status_code=404, detail=f"Account {account_id} not found")
 
 @app.post("/api/payment", response_model=PaymentResponse)
-async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)):
+async def process_payment(
+    request: PaymentRequest,
+    auth: AuthContext = Depends(require_auth),
+    db: Session = Depends(get_db)
+):
     """
     Process a payment transaction.
 
@@ -678,6 +701,7 @@ async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)
     client cannot supply or influence it. A payment is declined unless the
     engine recommends ALLOW or STEP_UP.
     """
+    verify_merchant_ownership(auth, request.merchant_id)
     if request.amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be greater than zero")
 
@@ -691,7 +715,8 @@ async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)
             status_code=409, detail=f"Transaction {transaction_id} already exists"
         )
 
-    if request.account_id not in MOCK_ACCOUNTS:
+    db_account = db.query(AccountModel).filter(AccountModel.account_id == request.account_id).first()
+    if not db_account and request.account_id not in MOCK_ACCOUNTS:
         raise HTTPException(status_code=404, detail=f"Account {request.account_id} not found")
 
     timestamp = datetime.datetime.utcnow()
@@ -730,7 +755,10 @@ async def process_payment(request: PaymentRequest, db: Session = Depends(get_db)
     try:
         db.add(db_transaction)
         if status == "completed":
-            MOCK_ACCOUNTS[request.account_id]["balance"] -= request.amount
+            if db_account:
+                db_account.balance = max(0.0, float(db_account.balance or 0.0) - request.amount)
+            if request.account_id in MOCK_ACCOUNTS:
+                MOCK_ACCOUNTS[request.account_id]["balance"] -= request.amount
         db.commit()
     except Exception:
         db.rollback()

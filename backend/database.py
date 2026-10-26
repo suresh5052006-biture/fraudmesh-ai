@@ -14,11 +14,13 @@ from models import Base, Merchant, Customer, Account, Device, Transaction
 from models import PaymentInstrument, FraudSignal, Investigation, IpAddress, FraudRing
 
 # Database configuration
-DATABASE_URL = "sqlite:///./fraudmesh.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./fraudmesh.db")
+connect_args = {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
+
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False}
+    connect_args=connect_args
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

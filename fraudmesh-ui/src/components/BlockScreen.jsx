@@ -50,15 +50,28 @@ const BlockScreen = ({ isVisible, onTryAgain, onContactSupport, onBackToStore, r
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-red-950/50 via-transparent to-slate-950" />
-        {[...Array(15)].map((_, i) => (
+        {[
+          { left: '12%', top: '18%', delay: '0.2s', duration: '3.5s' },
+          { left: '28%', top: '74%', delay: '1.1s', duration: '4.2s' },
+          { left: '45%', top: '33%', delay: '0.5s', duration: '3.8s' },
+          { left: '63%', top: '82%', delay: '1.8s', duration: '4.5s' },
+          { left: '79%', top: '25%', delay: '0.9s', duration: '3.2s' },
+          { left: '88%', top: '65%', delay: '1.4s', duration: '4.0s' },
+          { left: '19%', top: '48%', delay: '2.1s', duration: '3.7s' },
+          { left: '52%', top: '15%', delay: '0.7s', duration: '4.4s' },
+          { left: '71%', top: '55%', delay: '1.6s', duration: '3.9s' },
+          { left: '36%', top: '90%', delay: '2.3s', duration: '4.1s' },
+          { left: '92%', top: '38%', delay: '0.4s', duration: '3.6s' },
+          { left: '8%',  top: '85%', delay: '1.9s', duration: '4.3s' },
+        ].map((p, i) => (
           <div
             key={i}
             className="absolute w-1 h-1 bg-red-400/20 rounded-full animate-ping"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 3}s`,
-              animationDuration: `${3 + Math.random() * 2}s`
+              left: p.left,
+              top: p.top,
+              animationDelay: p.delay,
+              animationDuration: p.duration
             }}
           />
         ))}

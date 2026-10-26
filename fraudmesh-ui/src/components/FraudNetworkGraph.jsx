@@ -14,7 +14,7 @@ const FraudNetworkGraph = ({ networkData, height = '450px' }) => {
     // Convert networkData (nodes & edges) into Cytoscape elements
     const elements = [];
 
-    const nodes = networkData?.nodes || [
+    const rawNodes = networkData?.nodes || [
       { id: 'acc_101', type: 'ACCOUNT', label: 'Acc: User 101', risk: 'HIGH' },
       { id: 'acc_102', type: 'ACCOUNT', label: 'Acc: User 102', risk: 'HIGH' },
       { id: 'acc_103', type: 'ACCOUNT', label: 'Acc: User 103', risk: 'MEDIUM' },
@@ -23,6 +23,14 @@ const FraudNetworkGraph = ({ networkData, height = '450px' }) => {
       { id: 'mch_tech', type: 'MERCHANT', label: 'Merchant: ElectroHQ', risk: 'LOW' },
       { id: 'mch_pay', type: 'MERCHANT', label: 'Merchant: QuickPay', risk: 'LOW' },
     ];
+
+    // Optimize graph performance by focusing on top 50 high-risk nodes when graph is large
+    let nodes = rawNodes;
+    if (nodes.length > 50) {
+      nodes = [...rawNodes]
+        .sort((a, b) => (b.risk || 0) - (a.risk || 0))
+        .slice(0, 50);
+    }
 
     const edges = networkData?.edges || [
       { source: 'acc_101', target: 'dev_d99', label: 'USED_DEVICE' },
@@ -35,18 +43,20 @@ const FraudNetworkGraph = ({ networkData, height = '450px' }) => {
     ];
 
     nodes.forEach(n => {
-      if (filterType !== 'ALL' && n.type !== filterType) return;
+      const typeUpper = (n.type || '').toUpperCase();
+      if (filterType !== 'ALL' && typeUpper !== filterType) return;
       
       let nodeColor = '#3b82f6'; // account blue
-      if (n.type === 'DEVICE') nodeColor = '#ef4444'; // device red
-      if (n.type === 'IP') nodeColor = '#f59e0b'; // ip amber
-      if (n.type === 'MERCHANT') nodeColor = '#10b981'; // merchant green
+      if (typeUpper === 'DEVICE') nodeColor = '#ef4444'; // device red
+      if (typeUpper === 'IP') nodeColor = '#f59e0b'; // ip amber
+      if (typeUpper === 'MERCHANT') nodeColor = '#10b981'; // merchant green
+      if (typeUpper === 'CUSTOMER') nodeColor = '#8b5cf6'; // customer purple
 
       elements.push({
         data: {
           id: n.id,
           label: n.label || n.id,
-          type: n.type,
+          type: typeUpper,
           risk: n.risk || 'LOW',
           color: nodeColor,
         },
@@ -56,7 +66,8 @@ const FraudNetworkGraph = ({ networkData, height = '450px' }) => {
     // Build a set of node IDs that are actually included after filtering
     const nodeIdSet = new Set();
     nodes.forEach(n => {
-      if (filterType !== 'ALL' && n.type !== filterType) return;
+      const typeUpper = (n.type || '').toUpperCase();
+      if (filterType !== 'ALL' && typeUpper !== filterType) return;
       nodeIdSet.add(n.id);
     });
 

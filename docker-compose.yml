@@ -1,0 +1,31 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fraudmesh-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=sqlite:///./fraudmesh.db
+      - ALLOWED_ORIGINS=http://localhost:5173,http://localhost:80,http://localhost
+      - DEVICE_SALT=fraudmesh_zk_production_secret_salt_2026
+    volumes:
+      - backend-data:/app
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./fraudmesh-ui
+      dockerfile: Dockerfile
+    container_name: fraudmesh-frontend
+    ports:
+      - "80:80"
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  backend-data:

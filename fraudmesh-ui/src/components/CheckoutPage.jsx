@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ShoppingBag, ArrowLeft, Shield, ChevronRight, XCircle } from 'lucide-react';
 import ProductStorefront from './ProductStorefront';
 import PaymentMethodSelector from './PaymentMethodSelector';
@@ -79,7 +79,7 @@ const CheckoutPage = () => {
 
       const result = await apiService.checkRisk(txnData);
       risk = result;
-    } catch (e) {
+    } catch {
       // Fail closed: without a server verdict the payment must not proceed.
       setShowFraudGate(false);
       setProcessing(false);
@@ -91,7 +91,7 @@ const CheckoutPage = () => {
     setShowFraudGate(true);
   };
 
-  const handleFraudGateComplete = ({ verdict, riskScore, action }) => {
+  const handleFraudGateComplete = ({ action }) => {
     setShowFraudGate(false);
 
     if (action === 'BLOCK') {

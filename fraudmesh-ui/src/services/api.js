@@ -1,18 +1,25 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+const API_KEY = import.meta.env.VITE_MERCHANT_API_KEY || 'fm_live_merchant_demo_key_2026';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
+  headers: {
+    'X-API-Key': API_KEY,
+  },
 });
 
-// Set to false when backend is running, or it auto-detects
-let MOCK_MODE = false;
+// Configure mock mode: explicitly via env or auto-detect
+const envMock = import.meta.env.VITE_USE_MOCK;
+let MOCK_MODE = envMock === 'true';
 
 const checkBackendConnection = async () => {
+  if (envMock === 'false') return false;
+  if (envMock === 'true') return true;
   try {
-    await api.get('/health');
+    await api.get('/health', { timeout: 3000 });
     return false;
   } catch {
     return true;
@@ -21,7 +28,7 @@ const checkBackendConnection = async () => {
 
 const initMockMode = async () => {
   MOCK_MODE = await checkBackendConnection();
-  console.log(MOCK_MODE ? 'Using MOCK API' : 'Using REAL backend API');
+  console.log(MOCK_MODE ? 'Using MOCK API' : `Using REAL backend API (${API_BASE_URL})`);
 };
 
 initMockMode();
@@ -106,19 +113,31 @@ export const apiService = {
     const response = await api.get('/transactions', {
       params: { page, page_size: pageSize, fraud_only: fraudOnly },
     });
-    return response.data;
+    const data = response.data || {};
+    const txns = data.items || data.transactions || [];
+    return {
+      ...data,
+      total: data.total ?? txns.length,
+      transactions: txns,
+      items: txns,
+    };
   },
 
   checkRisk: async (transactionData) => {
     if (MOCK_MODE) {
-      await delay(1500 + Math.random() * 1000);
+      await delay(1200 + Math.random() * 800);
       return generateRiskResponse(transactionData.amount, transactionData.payment_method);
     }
-    const response = await api.post('/risk/check', transactionData);
+    const payload = {
+      ...transactionData,
+      amount: parseFloat(transactionData.amount) || 0,
+      timestamp: transactionData.timestamp || new Date().toISOString()
+    };
+    const response = await api.post('/risk/check', payload);
     return response.data;
   },
 
-  getNetwork: async (limit = 5000) => {
+  getNetwork: async (limit = 500) => {
     if (MOCK_MODE) {
       await delay(500);
       return MOCK_DATA.network;
@@ -135,7 +154,7 @@ export const apiService = {
     const response = await api.get('/signals', {
       params: { active_only: activeOnly, min_severity: minSeverity, limit },
     });
-    return response.data;
+    return Array.isArray(response.data) ? response.data : (response.data?.items || []);
   },
 
   publishSignal: async (signalData) => {

@@ -6,9 +6,17 @@ Tests graph-based fraud cluster detection
 import json
 import sys
 import os
+
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 sys.path.insert(0, os.path.dirname(__file__))
 
 from database import SessionLocal, init_db, seed_database
+from models import Transaction
 from fraud_network import get_fraud_network
 
 
